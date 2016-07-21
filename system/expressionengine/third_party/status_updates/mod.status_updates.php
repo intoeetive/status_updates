@@ -136,109 +136,9 @@ class Status_updates {
         
         $out = $this->EE->TMPL->parse_variables($tagdata_orig, $variables);
         
-        if ($total > $this->perpage && $this->EE->TMPL->fetch_param('disable')!='pagination')
+        if ($this->EE->TMPL->fetch_param('disable')!='pagination')
         {
-            $this->EE->load->library('pagination');
-
-			$config['base_url']		= $basepath;
-			$config['prefix']		= 'P';
-			$config['total_rows'] 	= $total;
-			$config['per_page']		= $this->perpage;
-			$config['cur_page']		= $start;
-			$config['first_link'] 	= $this->EE->lang->line('pag_first_link');
-			$config['last_link'] 	= $this->EE->lang->line('pag_last_link');
-
-			$this->EE->pagination->initialize($config);
-			$pagination_links = $this->EE->pagination->create_links();	
-			$this->EE->pagination->initialize($config); // Re-initialize to reset config
-			$pagination_array = $this->EE->pagination->create_link_array();
-			
-			$parse_array = array(
-				'current_page' => floor(($start / $this->perpage) + 1),
-				'total_pages' => intval(floor($total / $this->perpage)),
-			);
-			
-			if ((($parse_array['total_pages'] * $this->perpage) - $this->perpage) > $start)
-			{
-				$page_next = reduce_double_slashes($basepath.'/P'.($start + $this->perpage));
-			}
-
-			if (($start - $this->perpage ) >= 0)
-			{
-				$page_previous = reduce_double_slashes($basepath.'/P'.($start - $this->perpage));
-			}
-				
-			
-
-			// Check to see if pagination_links is being used as a single 
-			// variable or as a variable pair
-			if (preg_match_all("/".LD."pagination_links".RD."(.+?)".LD.'\/'."pagination_links".RD."/s", $paginate_tagdata, $matches))
-			{
-				$parse_array['pagination_links'] = array($pagination_array);
-			}
-			else
-			{
-				$parse_array['pagination_links'] = $pagination_links;
-			}
-			
-			// Parse current_page and total_pages
-			$paginate_tagdata = $this->EE->TMPL->parse_variables(
-				$paginate_tagdata,
-				array($parse_array)
-			);
-			
-			
-			if (preg_match_all("/".LD."if previous_page".RD."(.+?)".LD.'\/'."if".RD."/s", $paginate_tagdata, $matches))
-			{
-				if ($page_previous == '')
-				{
-					 $paginate_tagdata = preg_replace("/".LD."if previous_page".RD.".+?".LD.'\/'."if".RD."/s", '', $paginate_tagdata);
-				}
-				else
-				{
-					foreach($matches[1] as $count => $match)
-					{					
-						$match = preg_replace("/".LD.'path.*?'.RD."/", 	$page_previous, $match);
-						$match = preg_replace("/".LD.'auto_path'.RD."/", $page_previous, $match);
-
-						$paginate_tagdata = str_replace($matches[0][$count], $match, $paginate_tagdata);
-					}
-				}
-			}
-
-			if (preg_match_all("/".LD."if next_page".RD."(.+?)".LD.'\/'."if".RD."/s", $paginate_tagdata, $matches))
-			{
-				if ($page_next == '')
-				{
-					 $paginate_tagdata = preg_replace("/".LD."if next_page".RD.".+?".LD.'\/'."if".RD."/s", '', $paginate_tagdata);
-				}
-				else
-				{
-					foreach ($matches[1] as $count => $match)
-					{
-						$match = preg_replace("/".LD.'path.*?'.RD."/", 	$page_next, $match);
-						$match = preg_replace("/".LD.'auto_path'.RD."/", $page_next, $match);
-
-						$paginate_tagdata = str_replace($matches[0][$count],	$match, $paginate_tagdata);
-					}					
-				}
-			}
-			
-			$paginate_tagdata = $this->EE->functions->prep_conditionals($paginate_tagdata, array('total_pages' => $parse_array['total_pages']));
-			
-			switch ($paginate)
-	        {
-	            case 'top':
-	                $out = $paginate_tagdata.$out;
-	                break;
-	            case 'both':
-	                $out = $paginate_tagdata.$out.$paginate_tagdata;
-	                break;
-	            case 'bottom':
-	            default:
-	                $out = $out.$paginate_tagdata;
-	        }
-					
+            $out = $this->_process_pagination($total, $this->perpage, $start, $basepath, $out, $paginate, $paginate_tagdata);		
         }
 
         return $out;
@@ -546,15 +446,90 @@ class Status_updates {
 			$this->EE->load->library($lib, $params);
             if ($provider=='yahoo')
             {
-                $this->EE->$lib->post($msg, $keys["$provider"]['oauth_token'], $keys["$provider"]['oauth_token_secret'], array('guid'=>$keys["$provider"]['guid']));
+                $this->EE->$lib->post($msg, $shorturl, $keys["$provider"]['oauth_token'], $keys["$provider"]['oauth_token_secret'], array('guid'=>$keys["$provider"]['guid']));
             }
             else
             {
-                $this->EE->$lib->post($msg, $keys["$provider"]['oauth_token'], $keys["$provider"]['oauth_token_secret']);    
+                $this->EE->$lib->post($msg, $shorturl, $keys["$provider"]['oauth_token'], $keys["$provider"]['oauth_token_secret']);    
             }
             $this->EE->load->remove_package_path(PATH_THIRD.'social_login_pro/');
         }
     }
+    
+    
+
+    function _process_pagination($total, $perpage, $start, $basepath='', $out='', $paginate='bottom', $paginate_tagdata='')
+    {
+        if (version_compare(APP_VER, '2.4.0', '>='))
+		{
+	        $this->EE->load->library('pagination');
+	        if (version_compare(APP_VER, '2.6.0', '>='))
+	        {
+	        	$pagination = $this->EE->pagination->create(__CLASS__);
+	        }
+	        else
+	        {
+	        	$pagination = new Pagination_object(__CLASS__);
+	        }
+            if (version_compare(APP_VER, '2.8.0', '>='))
+            {
+                $this->EE->TMPL->tagdata = $pagination->prepare($this->EE->TMPL->tagdata);
+                $pagination->build($total, $perpage);
+            }
+            else
+            {
+                $pagination->get_template();
+    	        $pagination->per_page = $perpage;
+    	        $pagination->total_rows = $total;
+    	        $pagination->offset = $start;
+    	        $pagination->build($pagination->per_page);
+            }
+	        
+	        $out = $pagination->render($out);
+  		}
+  		else
+  		{
+        
+	        if ($total > $perpage)
+	        {
+	            $this->EE->load->library('pagination');
+	
+				$config['base_url']		= $basepath;
+				$config['prefix']		= 'P';
+				$config['total_rows'] 	= $total;
+				$config['per_page']		= $perpage;
+				$config['cur_page']		= $start;
+				$config['first_link'] 	= $this->EE->lang->line('pag_first_link');
+				$config['last_link'] 	= $this->EE->lang->line('pag_last_link');
+	
+				$this->EE->pagination->initialize($config);
+				$pagination_links = $this->EE->pagination->create_links();	
+	            $paginate_tagdata = $this->EE->TMPL->swap_var_single('pagination_links', $pagination_links, $paginate_tagdata);			
+	        }
+	        else
+	        {
+	            $paginate_tagdata = $this->EE->TMPL->swap_var_single('pagination_links', '', $paginate_tagdata);		
+	        }
+	        
+	        switch ($paginate)
+	        {
+	            case 'top':
+	                $out = $paginate_tagdata.$out;
+	                break;
+	            case 'both':
+	                $out = $paginate_tagdata.$out.$paginate_tagdata;
+	                break;
+	            case 'bottom':
+	            default:
+	                $out = $out.$paginate_tagdata;
+	        }
+	        
+    	}
+        
+        return $out;
+    }
+
+    
 
 
 }

@@ -3,7 +3,7 @@
 if ( ! defined('STATUS_UPDATES_ADDON_NAME'))
 {
 	define('STATUS_UPDATES_ADDON_NAME',         'Status Updates');
-	define('STATUS_UPDATES_ADDON_VERSION',      '1.0.1');
+	define('STATUS_UPDATES_ADDON_VERSION',      '1.0.4');
 }
 
 $config['name'] = STATUS_UPDATES_ADDON_NAME;
